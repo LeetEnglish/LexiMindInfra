@@ -1,0 +1,52 @@
+global:
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alerts@lexienglish.com'
+  smtp_auth_username: '${SMTP_USERNAME}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default-receiver'
+  routes:
+    - receiver: 'critical-alerts'
+      match:
+        severity: critical
+      continue: true
+    - receiver: 'slack-notifications'
+      match_re:
+        severity: critical|warning
+
+receivers:
+  - name: 'default-receiver'
+    email_configs:
+      - to: 'dev-team@lexienglish.com'
+        send_resolved: true
+
+  - name: 'critical-alerts'
+    email_configs:
+      - to: 'oncall@lexienglish.com'
+        send_resolved: true
+    # Uncomment for PagerDuty
+    # pagerduty_configs:
+    #   - service_key: '${PAGERDUTY_KEY}'
+
+  - name: 'slack-notifications'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#lexi-alerts'
+        send_resolved: true
+        title: '{{ .Status | toUpper }}: {{ .CommonAnnotations.summary }}'
+        text: '{{ .CommonAnnotations.description }}'
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
